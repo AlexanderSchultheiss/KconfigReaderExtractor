@@ -90,7 +90,8 @@ public class KconfigReaderWrapper {
      */
     public boolean prepareLinux() throws IOException {
         LOGGER.logDebug("prepareLinux() called");
-        
+
+        // TODO: See whether we should further use the "-i" flag
         List<@NonNull String> parameters = new ArrayList<>(Arrays.asList("make", "allyesconfig", "prepare"));
         if (!extraMakeParameters.isEmpty()) {
             parameters.addAll(1, extraMakeParameters);
@@ -98,8 +99,11 @@ public class KconfigReaderWrapper {
         ProcessBuilder processBuilder = createPrepareProcess(parameters);
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+
         boolean success = Util.executeProcess(processBuilder, "make", stdout, stderr, 0);
-        
+
+        logOutput(stdout, stderr);
+
         if (!success && dumpconfVersion == DumpconfVersion.LINUX) {
             // Old Linux versions may use an obsolete MAKE syntax, try to fix them according to
             // https://www.programmersought.com/article/88083080956/
@@ -131,9 +135,12 @@ public class KconfigReaderWrapper {
                     };
                     
                     // Try make script again and revert it afterwards
+                    stdout = new ByteArrayOutputStream();
+                    stderr = new ByteArrayOutputStream();
                     try {
-                        success = Util.executeProcess(processBuilder, "make");
+                        success = Util.executeProcess(processBuilder, "make", stdout, stderr, 0);
                     } finally {
+                        logOutput(stdout, stderr);
                         fileRevert.runAndJoin();
                     }
                 } else {
@@ -186,7 +193,7 @@ public class KconfigReaderWrapper {
      * @throws IOException If executing dumpconf fails.
      */
     public @Nullable File compileDumpconf() throws IOException {
-        LOGGER.logDebug("compileDumpconf() called");
+        LOGGER.logStatus("compileDumpconf() with version " + dumpconfVersion + " called");
         
         // extract dumpconf.c to temporary file
         File dumpconfSource = new File(resourceDir, "dumpconf.c");
@@ -211,6 +218,8 @@ public class KconfigReaderWrapper {
                 success = Util.executeProcess(processBuilder, "gcc");
             }
         }
+
+        logOutput(stdout, stderr);
         
         if (!success) {
             dumpconfExe.delete();
@@ -274,7 +283,7 @@ public class KconfigReaderWrapper {
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
         
         boolean success = Util.executeProcess(processBuilder, "KconfigReader", stdout, stderr, timeout);
-        
+        logOutput(stdout, stderr);
         if (!success && dumpconfVersion == DumpconfVersion.LINUX) {
             // Old Linux versions may not have a top level Kconfig file, check if this was the case
             if (checkForOccurence(stdout, stderr, MISSING_KCONFIG_FILE)) {
@@ -304,12 +313,15 @@ public class KconfigReaderWrapper {
                             kconfigTrg.delete();
                         }
                     };
-                    
+
+                    stdout = new ByteArrayOutputStream();
+                    stderr = new ByteArrayOutputStream();
                     // Try again
                     try {
                         processBuilder = createKcReaderProcess(dumpconfExe, arch, kconfigReaderJar, outputBase);
-                        success = Util.executeProcess(processBuilder, "KconfigReader", timeout);
+                        success = Util.executeProcess(processBuilder, "KconfigReader", stdout, stderr, timeout);
                     } finally {
+                        logOutput(stdout, stderr);
                         fileRevert.runAndJoin();
                     }
                 } else {
@@ -324,6 +336,19 @@ public class KconfigReaderWrapper {
         }
         
         return success ? outputBase : null;
+    }
+
+    private void logOutput(ByteArrayOutputStream stdout, ByteArrayOutputStream stderr) {
+        String infoString;
+        String errorString;
+        infoString = stdout.toString();
+        errorString = stderr.toString();
+        if (infoString.length() > 0) {
+            LOGGER.logInfo(stdout.toString());
+        }
+        if (errorString.length() > 0) {
+            LOGGER.logError(stderr.toString());
+        }
     }
 
     /**
