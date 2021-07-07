@@ -13,6 +13,9 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * NOTE: The original version of this file was changed by Alexander Schultheiß,
+ * Humboldt-Universität zu Berlin, alexander.schultheiss@informatik.hu-berlin.de
  */
 package net.ssehub.kernel_haven.kconfigreader;
 
@@ -22,6 +25,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -111,7 +115,18 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
                     + "true, the extractor will store source locations for each variable. Those locations represent "
                     + "occurences of the variable in the files that kconfigreader used for generating the "
                     + "VariabilityModel.");
-    
+
+    /**
+     * A setting that specifies whether to save the DIMACS file
+     */
+    public static final @NonNull Setting<@NonNull Boolean> SAVE_DIMACS
+            = new Setting<>("variability.extractor.save_dimacs", Setting.Type.BOOLEAN, true, "true", "If set to "
+            + "true, the extractor will save the DIMACS file created by KconfigRreader in the output directory.");
+
+    private boolean save_dimacs;
+
+    private File dimacs_target_file;
+
     private static final Logger LOGGER = Logger.get();
     
     /**
@@ -159,11 +174,16 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
         config.registerSetting(EXTRA_MAKE_PARAMETERS);
         extraMakeParameters = config.getValue(EXTRA_MAKE_PARAMETERS);
 
+        config.registerSetting(SAVE_DIMACS);
+        save_dimacs = config.getValue(SAVE_DIMACS);
+        dimacs_target_file = new File(config.getValue(DefaultSettings.OUTPUT_DIR), "feature-model.dimacs");
+
         resourceDir = Util.getExtractorResourceDir(config, getClass());
-        
+
         // Use for the process the same timeout as for the calling provider (0 = no timeout)
         config.registerSetting(DefaultSettings.VARIABILITY_PROVIDER_TIMEOUT);
         timeout = config.getValue(DefaultSettings.VARIABILITY_PROVIDER_TIMEOUT);
+
     }
 
     @Override
@@ -201,6 +221,14 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
         }
         
         LOGGER.logDebug("KconfigReader run successful", "Output is at: " + outputBase.getAbsolutePath());
+
+        if (save_dimacs) {
+            try {
+                Files.copy(outputBase.toPath(), dimacs_target_file.toPath());
+            } catch (IOException e) {
+                LOGGER.logError("Was not able to copy DIMACS file from \"" + outputBase + "\" to \"" + dimacs_target_file + "\"");
+            }
+        }
 
         Converter converter = new Converter(outputBase);
         VariabilityModel result = null;
