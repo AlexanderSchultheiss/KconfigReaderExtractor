@@ -26,6 +26,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -125,7 +127,7 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
 
     private boolean save_dimacs;
 
-    private File dimacs_target_file;
+    private File dimacsTargetFile;
 
     private static final Logger LOGGER = Logger.get();
     
@@ -176,7 +178,7 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
 
         config.registerSetting(SAVE_DIMACS);
         save_dimacs = config.getValue(SAVE_DIMACS);
-        dimacs_target_file = new File(config.getValue(DefaultSettings.OUTPUT_DIR), "feature-model.dimacs");
+        dimacsTargetFile = new File(config.getValue(DefaultSettings.OUTPUT_DIR), "feature-model.dimacs");
 
         resourceDir = Util.getExtractorResourceDir(config, getClass());
 
@@ -216,17 +218,18 @@ public class KconfigReaderExtractor extends AbstractVariabilityModelExtractor {
             
         } catch (IOException e) {
             // outputBase can only be null here; no cleanup needed
-            
             throw new ExtractorException(e);
         }
         
         LOGGER.logDebug("KconfigReader run successful", "Output is at: " + outputBase.getAbsolutePath());
 
         if (save_dimacs) {
+            Path dimacsSourceFile = Paths.get(outputBase.getAbsolutePath() + ".dimacs");
             try {
-                Files.copy(outputBase.toPath(), dimacs_target_file.toPath());
+                LOGGER.logInfo("Copying DIMACS file from " + dimacsSourceFile + " to " + dimacsTargetFile.getAbsolutePath());
+                Files.copy(dimacsSourceFile, dimacsTargetFile.toPath());
             } catch (IOException e) {
-                LOGGER.logError("Was not able to copy DIMACS file from \"" + outputBase + "\" to \"" + dimacs_target_file + "\"");
+                LOGGER.logException("Was not able to copy DIMACS file from \"" + dimacsSourceFile + "\" to \"" + dimacsTargetFile + "\"", e);
             }
         }
 
